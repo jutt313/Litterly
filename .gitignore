@@ -1,0 +1,32 @@
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Data (local only)
+backend/data/uploads/*
+backend/data/output/*
+backend/data/jobs/*
+!backend/data/uploads/.gitkeep
+!backend/data/output/.gitkeep
+!backend/data/jobs/.gitkeep
+
+# Node
+frontend/node_modules/
+frontend/build/
+frontend/.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
