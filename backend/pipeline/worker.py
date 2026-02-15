@@ -2,6 +2,7 @@ import asyncio
 import csv
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from backend.config import settings
@@ -24,13 +25,29 @@ class WorkerManager:
         self.results: list[ExportRow] = []
         self.lock = asyncio.Lock()
         self._stop_event = asyncio.Event()
+        self._csv_header_written = False
+
+        # Create job folder
+        self.job_folder = self._create_job_folder()
+        self.job.job_folder = str(self.job_folder)
+        self.live_csv_path = self.job_folder / "matrixify_live.csv"
+        self.final_csv_path = self.job_folder / "matrixify_final.csv"
+
+    def _create_job_folder(self) -> Path:
+        """Create a folder for this job using the job name."""
+        # Clean filename for folder name
+        safe_name = re.sub(r'[^\w\s-]', '', Path(self.job.filename).stem)
+        safe_name = re.sub(r'[\s]+', '_', safe_name).strip('_')
+        folder_name = f"{self.job.id}_{safe_name}"
+
+        job_folder = settings.OUTPUT_DIR / folder_name
+        job_folder.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Created job folder: {job_folder}")
+        return job_folder
 
     async def start(self, products: list[RawProduct]):
-        """Start processing products with parallel workers.
-
-        Args:
-            products: List of RawProduct to process.
-        """
+        """Start processing products with parallel workers."""
         self.job.status = JobStatus.RUNNING
         self.job.started_at = datetime.now()
         self.job.total_products = len(products)
@@ -56,11 +73,11 @@ class WorkerManager:
         for w in workers:
             w.cancel()
 
-        # Export results to CSV
+        # Write final CSV (complete copy)
         if self.results:
-            output_path = await self._export_csv()
-            self.job.output_file = str(output_path)
+            await self._export_final_csv()
 
+        self.job.output_file = str(self.final_csv_path)
         self.job.status = JobStatus.COMPLETED
         self.job.completed_at = datetime.now()
         self._save_job()
@@ -91,6 +108,10 @@ class WorkerManager:
                     self.results.append(export_row)
                     self.job.completed_products += 1
                     self._update_product_status(product.id, ProductStatus.COMPLETED)
+
+                    # Write to live CSV immediately
+                    self._append_to_live_csv(export_row)
+
                     self._save_job()
 
             except Exception as e:
@@ -143,27 +164,47 @@ class WorkerManager:
                     p.started_at = datetime.now()
                 break
 
-    async def _export_csv(self) -> Path:
-        """Export all results to a Matrixify-compatible CSV."""
-        output_path = settings.OUTPUT_DIR / f"{self.job.id}_matrixify.csv"
+    def _append_to_live_csv(self, row: ExportRow):
+        """Append a single product row to the live CSV file (updates in real-time)."""
+        fieldnames = list(row.model_dump().keys())
 
+        # Write header if first row
+        if not self._csv_header_written:
+            with open(self.live_csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerow(row.model_dump())
+            self._csv_header_written = True
+        else:
+            with open(self.live_csv_path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writerow(row.model_dump())
+
+        logger.info(f"Live CSV updated: {self.live_csv_path} ({len(self.results)} products)")
+
+    async def _export_final_csv(self):
+        """Export all results to a final Matrixify-compatible CSV."""
         if not self.results:
-            return output_path
+            return
 
-        # Get all field names from ExportRow
         fieldnames = list(self.results[0].model_dump().keys())
 
-        with open(output_path, "w", newline="", encoding="utf-8") as f:
+        with open(self.final_csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for row in self.results:
                 writer.writerow(row.model_dump())
 
-        logger.info(f"Exported {len(self.results)} products to {output_path}")
-        return output_path
+        logger.info(f"Final CSV exported: {self.final_csv_path} ({len(self.results)} products)")
 
     def _save_job(self):
         """Save job state to disk for persistence."""
+        # Save to main jobs dir (for tracking)
         job_path = settings.JOBS_DIR / f"{self.job.id}.json"
         with open(job_path, "w") as f:
+            f.write(self.job.model_dump_json(indent=2))
+
+        # Also save a copy in the job folder
+        job_folder_path = self.job_folder / "job.json"
+        with open(job_folder_path, "w") as f:
             f.write(self.job.model_dump_json(indent=2))

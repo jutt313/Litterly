@@ -47,3 +47,4 @@ class Job(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     output_file: str | None = None
+    job_folder: str | None = None

@@ -144,16 +144,55 @@ function Pipeline() {
               Stop
             </button>
           )}
-          {job.output_file && (
-            <button
-              className="btn btn-success"
-              onClick={() => window.open(`/api/jobs/${jobId}/export`, '_blank')}
-            >
-              Download CSV
-            </button>
-          )}
         </div>
       </div>
+
+      {/* Job Folder & Downloads */}
+      {(job.job_folder || job.status === 'running' || job.output_file) && (
+        <div className="card">
+          <h2>Output</h2>
+
+          {job.job_folder && (
+            <div style={{ marginBottom: 16 }}>
+              <label>Job Folder</label>
+              <div style={{
+                background: '#252525',
+                border: '1px solid #333',
+                borderRadius: 8,
+                padding: '10px 14px',
+                fontSize: 13,
+                color: '#60a5fa',
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+              }}>
+                {job.job_folder}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {/* Live CSV — show while running or if completed products exist */}
+            {(job.status === 'running' || job.completed_products > 0) && (
+              <button
+                className="btn btn-primary"
+                onClick={() => window.open(`/api/jobs/${jobId}/export/live`, '_blank')}
+              >
+                Download Live CSV ({job.completed_products} products)
+              </button>
+            )}
+
+            {/* Final CSV — show only after job is done */}
+            {job.output_file && (
+              <button
+                className="btn btn-success"
+                onClick={() => window.open(`/api/jobs/${jobId}/export`, '_blank')}
+              >
+                Download Final CSV
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Product list */}
       <div className="card">

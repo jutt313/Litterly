@@ -97,6 +97,8 @@ async def list_jobs():
                 "completed_products": job.completed_products,
                 "failed_products": job.failed_products,
                 "created_at": str(job.created_at),
+                "job_folder": job.job_folder,
+                "has_output": job.output_file is not None,
             })
     return jobs
 
@@ -174,6 +176,25 @@ async def export_job(job_id: str):
         output_path,
         media_type="text/csv",
         filename=f"litterly_{job_id}_matrixify.csv",
+    )
+
+
+@router.get("/jobs/{job_id}/export/live")
+async def export_job_live(job_id: str):
+    """Download the live (in-progress) CSV for a running job."""
+    job = _load_job(job_id)
+
+    if not job.job_folder:
+        raise HTTPException(404, "No job folder found")
+
+    live_path = Path(job.job_folder) / "matrixify_live.csv"
+    if not live_path.exists():
+        raise HTTPException(404, "No live CSV available yet — no products completed")
+
+    return FileResponse(
+        live_path,
+        media_type="text/csv",
+        filename=f"litterly_{job_id}_live.csv",
     )
 
 
