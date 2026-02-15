@@ -64,7 +64,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Install Python dependencies
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ### Step 3: Add your API keys
@@ -107,7 +107,7 @@ Open **two terminal windows**.
 ```bash
 cd Litterly
 source .venv/bin/activate
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 **Terminal 2 — Frontend:**
