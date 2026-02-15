@@ -166,19 +166,20 @@ class WorkerManager:
 
     def _append_to_live_csv(self, row: ExportRow):
         """Append a single product row to the live CSV file (updates in real-time)."""
-        fieldnames = list(row.model_dump().keys())
+        csv_row = row.to_csv_dict()
+        fieldnames = list(csv_row.keys())
 
         # Write header if first row
         if not self._csv_header_written:
             with open(self.live_csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
-                writer.writerow(row.model_dump())
+                writer.writerow(csv_row)
             self._csv_header_written = True
         else:
             with open(self.live_csv_path, "a", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writerow(row.model_dump())
+                writer.writerow(csv_row)
 
         logger.info(f"Live CSV updated: {self.live_csv_path} ({len(self.results)} products)")
 
@@ -187,13 +188,13 @@ class WorkerManager:
         if not self.results:
             return
 
-        fieldnames = list(self.results[0].model_dump().keys())
+        fieldnames = list(self.results[0].to_csv_dict().keys())
 
         with open(self.final_csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for row in self.results:
-                writer.writerow(row.model_dump())
+                writer.writerow(row.to_csv_dict())
 
         logger.info(f"Final CSV exported: {self.final_csv_path} ({len(self.results)} products)")
 

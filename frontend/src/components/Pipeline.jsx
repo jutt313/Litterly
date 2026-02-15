@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import ChatPanel from './ChatPanel'
 
 function Pipeline() {
   const { jobId } = useParams()
@@ -9,6 +10,7 @@ function Pipeline() {
   const [llmProvider, setLlmProvider] = useState('deepseek')
   const [workers, setWorkers] = useState(10)
   const wsRef = useRef(null)
+  const [chatOpen, setChatOpen] = useState(false)
 
   useEffect(() => {
     loadJob()
@@ -81,7 +83,7 @@ function Pipeline() {
     : 0
 
   return (
-    <div>
+    <div style={{ paddingRight: chatOpen ? 410 : 0, transition: 'padding-right 0.3s' }}>
       <h2 style={{ fontSize: 24, color: '#fff', marginBottom: 24 }}>
         {job.filename}
       </h2>
@@ -215,6 +217,13 @@ function Pipeline() {
           ))}
         </div>
       </div>
+
+      {/* Litterly Chat */}
+      <ChatPanel
+        jobId={jobId}
+        isOpen={chatOpen}
+        onToggle={() => setChatOpen(!chatOpen)}
+      />
     </div>
   )
 }

@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from backend.config import settings
 from backend.models.pipeline import Job, JobStatus, ProductProgress, ProductStatus
 from backend.agents.ingestion import IngestionAgent
+from backend.agents.chat import ChatAgent
+from backend.llm import get_llm
 from backend.pipeline.worker import WorkerManager
 
 logger = logging.getLogger("litterly.api")
@@ -31,6 +33,11 @@ class SettingsUpdate(BaseModel):
     deepseek_api_key: str | None = None
     default_llm: str | None = None
     default_workers: int | None = None
+
+
+class ChatRequest(BaseModel):
+    message: str
+    conversation_history: list[dict] = []
 
 
 # ─── Upload ───
@@ -252,6 +259,34 @@ async def export_job_live(job_id: str):
         media_type="text/csv",
         filename=f"litterly_{job_id}_live.csv",
     )
+
+
+# ─── Chat ───
+
+@router.post("/jobs/{job_id}/chat")
+async def chat(job_id: str, request: ChatRequest):
+    """Chat with Litterly about this job."""
+    logger.info(f"[CHAT] Message for job {job_id}: {request.message[:80]}...")
+
+    job = _load_job(job_id)
+
+    # Use the job's LLM provider
+    llm = get_llm(job.llm_provider)
+    chat_agent = ChatAgent(llm=llm)
+
+    try:
+        response = await chat_agent.run({
+            "message": request.message,
+            "job_id": job_id,
+            "conversation_history": request.conversation_history,
+        })
+
+        logger.info(f"[CHAT] Response generated ({len(response)} chars)")
+        return {"response": response, "job_id": job_id}
+
+    except Exception as e:
+        logger.error(f"[CHAT] Error: {e}")
+        raise HTTPException(500, f"Chat failed: {e}")
 
 
 # ─── Settings ───

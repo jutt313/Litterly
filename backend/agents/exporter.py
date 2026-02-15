@@ -1,3 +1,4 @@
+import json
 import re
 from backend.agents.base import BaseAgent
 from backend.models.product import MergedProduct, ShopifyProduct, ExportRow
@@ -18,40 +19,70 @@ class ExporterAgent(BaseAgent):
             ExportRow ready for CSV export.
         """
         merged, shopify = input_data
+        raw = merged.raw
 
         # Build body HTML from all sections
         body_html = self._build_body_html(shopify)
 
-        # Generate handle from title
-        handle = self._slugify(shopify.title)
+        # Use original handle if available, otherwise generate from title
+        handle = raw.handle if raw.handle else self._slugify(shopify.title)
+
+        # Use original image if available, otherwise use first from merged
+        image_src = ""
+        if raw.images:
+            image_src = raw.images[0]
+        elif merged.all_images:
+            # Filter out non-URL entries
+            for img in merged.all_images:
+                if img.startswith("http"):
+                    image_src = img
+                    break
+
+        # Build 6 separate USPs in rich_text_field JSON
+        usps_padded = (shopify.usps + [""] * 6)[:6]
 
         return ExportRow(
+            # Core fields — preserve from input where available
             handle=handle,
+            command="UPDATE",
             title=shopify.title,
             body_html=body_html,
-            vendor=merged.brand,
-            product_type="",
-            tags="",
-            variant_sku="",
-            variant_weight=merged.weight or "",
-            variant_weight_unit="g",
-            image_src=merged.all_images[0] if merged.all_images else "",
-            image_alt_text=shopify.title,
+            vendor=merged.brand or raw.vendor or "",
+            product_type=raw.product_type,
+            tags=raw.tags,
+            status=raw.status or "Active",
+            published=raw.published or "TRUE",
+            image_src=image_src,
+            image_alt_text=raw.image_alt_text or shopify.title,
+            # Variant fields — preserve from input
+            variant_sku=raw.variant_sku,
+            variant_price=raw.variant_price or raw.price or "",
+            variant_barcode=raw.variant_barcode,
+            variant_weight=raw.variant_weight or merged.weight or "",
+            variant_weight_unit=raw.variant_weight_unit or "g",
+            # SEO
             seo_title=shopify.title,
             seo_description=shopify.description,
-            metafield_usps="\n".join(shopify.usps),
-            metafield_specifications=shopify.specifications,
-            metafield_who_is_this_for="\n".join(shopify.who_is_this_for),
-            metafield_benefits="\n".join(shopify.benefits),
-            metafield_features="\n".join(shopify.features),
-            metafield_whats_inside=shopify.whats_inside,
-            metafield_how_to_use=shopify.how_to_use,
-            metafield_product_story=shopify.product_story,
-            metafield_ingredients="\n".join(shopify.ingredients),
-            metafield_certifications="\n".join(shopify.certifications),
-            metafield_about_brand=shopify.about_brand,
-            metafield_shipping=shopify.shipping,
-            metafield_sold_in_stores="\n".join(shopify.sold_in_stores),
+            # 6 separate USP metafields
+            metafield_usp1=_to_rich_text(usps_padded[0]),
+            metafield_usp2=_to_rich_text(usps_padded[1]),
+            metafield_usp3=_to_rich_text(usps_padded[2]),
+            metafield_usp4=_to_rich_text(usps_padded[3]),
+            metafield_usp5=_to_rich_text(usps_padded[4]),
+            metafield_usp6=_to_rich_text(usps_padded[5]),
+            # Other metafields in rich_text_field JSON
+            metafield_specifications=_to_rich_text(shopify.specifications),
+            metafield_who_is_this_for=_to_rich_text("\n".join(shopify.who_is_this_for)),
+            metafield_benefits=_to_rich_text("\n".join(shopify.benefits)),
+            metafield_features=_to_rich_text("\n".join(shopify.features)),
+            metafield_whats_inside=_to_rich_text(shopify.whats_inside),
+            metafield_how_to_use=_to_rich_text(shopify.how_to_use),
+            metafield_product_story=_to_rich_text(shopify.product_story),
+            metafield_ingredients=_to_rich_text("\n".join(shopify.ingredients)),
+            metafield_certifications=_to_rich_text("\n".join(shopify.certifications)),
+            metafield_about_brand=_to_rich_text(shopify.about_brand),
+            metafield_shipping=_to_rich_text(shopify.shipping),
+            metafield_sold_in_stores=_to_rich_text("\n".join(shopify.sold_in_stores)),
         )
 
     def _build_body_html(self, shopify: ShopifyProduct) -> str:
@@ -121,3 +152,25 @@ class ExporterAgent(BaseAgent):
         text = re.sub(r"[\s_]+", "-", text)
         text = re.sub(r"-+", "-", text)
         return text.strip("-")
+
+
+def _to_rich_text(text: str) -> str:
+    """Convert plain text to Shopify rich_text_field JSON format.
+
+    Shopify metafields of type rich_text_field expect JSON in this format:
+    {"type": "root", "children": [{"type": "paragraph", "children": [{"type": "text", "value": "..."}]}]}
+    """
+    if not text or not text.strip():
+        return ""
+
+    return json.dumps({
+        "type": "root",
+        "children": [
+            {
+                "type": "paragraph",
+                "children": [
+                    {"type": "text", "value": text.strip()}
+                ]
+            }
+        ]
+    })
