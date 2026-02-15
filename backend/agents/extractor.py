@@ -66,6 +66,11 @@ class ExtractorAgent(BaseAgent):
         if not self.llm:
             raise RuntimeError("ExtractorAgent requires an LLM provider")
 
+        def _as_str(value):
+            if value is None:
+                return None
+            return str(value)
+
         prompt = f"""Extract all product information from this page content:
 
 URL: {url}
@@ -97,6 +102,6 @@ Return a JSON object with: title, description, price, weight, dimensions, images
             reviews_summary=data.get("reviews_summary"),
             ingredients=data.get("ingredients", []),
             certifications=data.get("certifications", []),
-            rating=data.get("rating"),
-            review_count=data.get("review_count"),
+            rating=_as_str(data.get("rating")),
+            review_count=_as_str(data.get("review_count")),
         )
